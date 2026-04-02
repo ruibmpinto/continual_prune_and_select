@@ -129,11 +129,14 @@ class FingerprintTaskSelector:
 
     # -----------------------------------------------------------------
     def register_task(self, task_id, dataset,
-                      num_samples=None):
+                      num_samples=None,
+                      deterministic_transform=None):
         """Build fingerprint DB for one task.
 
         Sets the model to the specified task, then
-        fingerprints training data.
+        fingerprints training data. If the dataset uses
+        stochastic augmentations, a deterministic transform
+        should be provided to ensure reproducible hashes.
 
         Parameters
         ----------
@@ -144,9 +147,20 @@ class FingerprintTaskSelector:
         num_samples : int, default=None
             Number of samples to fingerprint. Uses
             constructor default if None.
+        deterministic_transform : callable, default=None
+            If provided, temporarily replaces the dataset
+            transform during registration to avoid
+            stochastic augmentation noise. Restored after.
         """
         if num_samples is None:
             num_samples = self._num_register_samples
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Swap to deterministic transform if provided
+        original_transform = None
+        if (deterministic_transform is not None
+                and hasattr(dataset, 'transform')):
+            original_transform = dataset.transform
+            dataset.transform = deterministic_transform
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         self._set_task_fn(self._model, task_id)
         self._model.eval()
@@ -154,6 +168,10 @@ class FingerprintTaskSelector:
             task_id, self._model, dataset,
             self._device, num_samples=num_samples,
         )
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Restore original transform
+        if original_transform is not None:
+            dataset.transform = original_transform
 
     # -----------------------------------------------------------------
     def select_task(self, x, num_learned,

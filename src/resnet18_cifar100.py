@@ -2135,9 +2135,15 @@ def eval(
             model, device, set_task,
             num_register_samples=args.fp_num_samples,
         )
+        # Deterministic transform (no random crop/flip)
+        fp_transform = torchvision.transforms.Compose([
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize(mean, std),
+        ])
         for tid in range(max_num_learned):
             fp_selector.register_task(
                 tid, train_dataset[tid],
+                deterministic_transform=fp_transform,
             )
         print('Fingerprint DB built for '
               f'{max_num_learned} tasks.')
@@ -2199,6 +2205,7 @@ def eval(
                 elif method == 'fingerprint':
                     j0 = fp_selector.select_task(
                         x_tmp, num_learned,
+                        min_score=args.fp_min_score,
                     )
                     if j0 is None:
                         continue
@@ -2370,6 +2377,11 @@ def main():
         '--fp_num_samples', type=int, default=500,
         help='number of training samples per task for '
         'fingerprint registration'
+    )
+    parser.add_argument(
+        '--fp_min_score', type=float, default=0.01,
+        help='minimum fingerprint overlap score to accept '
+        'a task match; batches below this abstain'
     )
     parser.add_argument(
         '--train', type=bool, default=True,

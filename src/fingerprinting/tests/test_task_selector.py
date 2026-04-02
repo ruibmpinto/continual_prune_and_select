@@ -156,6 +156,54 @@ class TestFingerprintTaskSelector:
         assert task_id is None
 
     # -----------------------------------------------------------------
+    def test_deterministic_registration(self):
+        """Repeated registration yields identical hashes."""
+        model = _make_dummy_model()
+        model.eval()
+        device = torch.device('cpu')
+        dataset = _make_task_dataset(n_samples=10)
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Register twice, compare hash databases
+        sel1 = FingerprintTaskSelector(
+            model, device, _dummy_set_task,
+            num_register_samples=10,
+        )
+        sel1.register_task(0, dataset)
+        hashes1 = dict(sel1._db._task_hashes[0])
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        sel2 = FingerprintTaskSelector(
+            model, device, _dummy_set_task,
+            num_register_samples=10,
+        )
+        sel2.register_task(0, dataset)
+        hashes2 = dict(sel2._db._task_hashes[0])
+        assert hashes1 == hashes2
+
+    # -----------------------------------------------------------------
+    def test_deterministic_transform_swap(self):
+        """deterministic_transform is used then restored."""
+        model = _make_dummy_model()
+        model.eval()
+        device = torch.device('cpu')
+        dataset = _make_task_dataset(n_samples=10)
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Give dataset a dummy stochastic transform
+        original = lambda x: x
+        dataset.transform = original
+        deterministic = lambda x: x
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        selector = FingerprintTaskSelector(
+            model, device, _dummy_set_task,
+            num_register_samples=10,
+        )
+        selector.register_task(
+            0, dataset,
+            deterministic_transform=deterministic,
+        )
+        # Transform should be restored
+        assert dataset.transform is original
+
+    # -----------------------------------------------------------------
     def test_save_load(self):
         """Database persists through save/load cycle."""
         model = _make_dummy_model()
