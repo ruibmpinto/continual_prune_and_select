@@ -204,6 +204,36 @@ class TestFingerprintTaskSelector:
         assert dataset.transform is original
 
     # -----------------------------------------------------------------
+    def test_near_tie_abstains(self):
+        """Near-tie scores cause abstain with certainty check.
+
+        When two tasks have very similar fingerprints
+        (registered from same data), certainty ratio is
+        close to 1.0, so selector should abstain.
+        """
+        model = _make_dummy_model()
+        model.eval()
+        device = torch.device('cpu')
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Register two tasks from SAME data so fingerprints
+        # are nearly identical -> near-tie at query time
+        dataset = _make_task_dataset(n_samples=20, seed=0)
+        selector = FingerprintTaskSelector(
+            model, device, _dummy_set_task,
+            num_register_samples=20,
+        )
+        selector.register_task(0, dataset)
+        selector.register_task(1, dataset)
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        x_query = dataset.tensors[0][:5]
+        # With high certainty requirement, should abstain
+        task_id = selector.select_task(
+            x_query, 2,
+            min_score=0.0, min_certainty=2.0,
+        )
+        assert task_id is None
+
+    # -----------------------------------------------------------------
     def test_save_load(self):
         """Database persists through save/load cycle."""
         model = _make_dummy_model()

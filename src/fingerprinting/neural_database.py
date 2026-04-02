@@ -162,9 +162,10 @@ class TaskFingerprintDatabase:
     def match(self, query_hashes, num_learned):
         """Match query fingerprint against stored tasks.
 
-        Computes hash-set overlap between the query and each
-        stored task fingerprint. The task with the highest
-        normalized overlap wins.
+        Computes generalized Jaccard similarity between the
+        query and each stored task fingerprint. Uses
+        sum(min) / sum(max) so the score is symmetric and
+        independent of hash density differences.
 
         Parameters
         ----------
@@ -175,10 +176,11 @@ class TaskFingerprintDatabase:
 
         Returns
         -------
-        best_task : int
-            Task ID with highest match score.
+        best_task : {int, None}
+            Task ID with highest match score, or None
+            if query is empty.
         scores : list[float]
-            Per-task normalized overlap scores.
+            Per-task Jaccard similarity scores in [0, 1].
         """
         query_total = sum(query_hashes.values())
         if query_total == 0:
@@ -190,15 +192,19 @@ class TaskFingerprintDatabase:
                 scores.append(0.0)
                 continue
             task_counter = self._task_hashes[task_id]
-            # Overlap = sum of min counts for shared hashes
+            # Generalized Jaccard: sum(min) / sum(max)
             overlap = 0
-            for h, q_count in query_hashes.items():
-                if h in task_counter:
-                    overlap += min(
-                        q_count, task_counter[h],
-                    )
-            # Normalize by query total
-            scores.append(overlap / query_total)
+            union = 0
+            all_keys = set(query_hashes) | set(task_counter)
+            for h in all_keys:
+                q_c = query_hashes.get(h, 0)
+                t_c = task_counter.get(h, 0)
+                overlap += min(q_c, t_c)
+                union += max(q_c, t_c)
+            if union == 0:
+                scores.append(0.0)
+            else:
+                scores.append(overlap / union)
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         best_task = int(np.argmax(scores))
         return best_task, scores

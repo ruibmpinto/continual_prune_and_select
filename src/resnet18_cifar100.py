@@ -2206,6 +2206,9 @@ def eval(
                     j0 = fp_selector.select_task(
                         x_tmp, num_learned,
                         min_score=args.fp_min_score,
+                        min_certainty=(
+                            args.fp_min_certainty
+                        ),
                     )
                     if j0 is None:
                         continue
@@ -2380,8 +2383,13 @@ def main():
     )
     parser.add_argument(
         '--fp_min_score', type=float, default=0.01,
-        help='minimum fingerprint overlap score to accept '
+        help='minimum fingerprint Jaccard score to accept '
         'a task match; batches below this abstain'
+    )
+    parser.add_argument(
+        '--fp_min_certainty', type=float, default=1.5,
+        help='minimum ratio of best to second-best '
+        'fingerprint score; abstains on near-ties'
     )
     parser.add_argument(
         '--train', type=bool, default=True,

@@ -175,12 +175,13 @@ class FingerprintTaskSelector:
 
     # -----------------------------------------------------------------
     def select_task(self, x, num_learned,
-                    min_score=0.0):
+                    min_score=0.0, min_certainty=1.5):
         """Select best task for input batch.
 
         Runs forward pass through each task's subnetwork,
         computes fingerprint, and matches against stored
-        task fingerprints.
+        task fingerprints. Abstains if best score is too
+        low or the margin over the runner-up is too small.
 
         Parameters
         ----------
@@ -189,18 +190,19 @@ class FingerprintTaskSelector:
         num_learned : int
             Number of tasks learned so far.
         min_score : float, default=0.0
-            Minimum overlap score to accept a match.
-            Returns None if best score is below this.
+            Minimum Jaccard score to accept a match.
+        min_certainty : float, default=1.5
+            Minimum ratio of best to second-best score.
+            Abstains on near-ties. Set to 1.0 to disable.
 
         Returns
         -------
         task_id : {int, None}
-            Selected task ID, or None if no task exceeds
-            min_score (abstain).
+            Selected task ID, or None if the match does
+            not meet score or certainty thresholds.
         """
         self._model.eval()
-        best_task = None
-        best_score = -1.0
+        task_scores = []
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         for task_id in range(num_learned):
             self._set_task_fn(self._model, task_id)
@@ -214,12 +216,28 @@ class FingerprintTaskSelector:
             _, scores = self._db.match(
                 query_hashes, num_learned,
             )
-            if scores[task_id] > best_score:
-                best_score = scores[task_id]
-                best_task = task_id
+            task_scores.append(scores[task_id])
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Find best and second-best
+        ranked = sorted(
+            range(len(task_scores)),
+            key=lambda i: task_scores[i],
+            reverse=True,
+        )
+        best_task = ranked[0]
+        best_score = task_scores[best_task]
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Absolute score threshold
         if best_score <= min_score:
             return None
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # Certainty ratio check (best / second-best)
+        if len(ranked) > 1:
+            second_score = task_scores[ranked[1]]
+            if second_score > 0:
+                certainty = best_score / second_score
+                if certainty < min_certainty:
+                    return None
         return best_task
 
     # -----------------------------------------------------------------
