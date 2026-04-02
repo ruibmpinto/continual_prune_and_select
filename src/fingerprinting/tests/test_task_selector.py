@@ -134,6 +134,28 @@ class TestFingerprintTaskSelector:
         assert task_id == 0
 
     # -----------------------------------------------------------------
+    def test_abstain_on_zero_input(self):
+        """Blank input with high min_score returns None."""
+        model = _make_dummy_model()
+        model.eval()
+        device = torch.device('cpu')
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        selector = FingerprintTaskSelector(
+            model, device, _dummy_set_task,
+            num_register_samples=10,
+        )
+        dataset = _make_task_dataset(n_samples=10)
+        selector.register_task(0, dataset)
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # All-zero input produces weak/no fingerprint
+        x = torch.zeros(4, 3, 32, 32)
+        task_id = selector.select_task(
+            x, 1, min_score=0.99,
+        )
+        # With a very high threshold, should abstain
+        assert task_id is None
+
+    # -----------------------------------------------------------------
     def test_save_load(self):
         """Database persists through save/load cycle."""
         model = _make_dummy_model()
@@ -142,6 +164,7 @@ class TestFingerprintTaskSelector:
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         selector = FingerprintTaskSelector(
             model, device, _dummy_set_task,
+            radius=5, top_k=30, fan_out=3,
             num_register_samples=10,
         )
         dataset = _make_task_dataset(n_samples=10)
@@ -159,6 +182,10 @@ class TestFingerprintTaskSelector:
             )
             selector2.load(path)
             assert selector2._db.num_tasks == 1
+            # Hyperparameters synced from loaded DB
+            assert selector2._radius == 5
+            assert selector2._top_k == 30
+            assert selector2._fan_out == 3
             # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             x = torch.randn(4, 3, 32, 32)
             task_id = selector2.select_task(x, 1)

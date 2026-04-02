@@ -117,6 +117,9 @@ class FingerprintTaskSelector:
             layer_names if layer_names is not None
             else DEFAULT_LAYERS
         )
+        self._radius = radius
+        self._top_k = top_k
+        self._fan_out = fan_out
         self._db = TaskFingerprintDatabase(
             layer_names=self._layer_names,
             radius=radius,
@@ -153,7 +156,8 @@ class FingerprintTaskSelector:
         )
 
     # -----------------------------------------------------------------
-    def select_task(self, x, num_learned):
+    def select_task(self, x, num_learned,
+                    min_score=0.0):
         """Select best task for input batch.
 
         Runs forward pass through each task's subnetwork,
@@ -166,14 +170,18 @@ class FingerprintTaskSelector:
             Input batch (B, C, H, W).
         num_learned : int
             Number of tasks learned so far.
+        min_score : float, default=0.0
+            Minimum overlap score to accept a match.
+            Returns None if best score is below this.
 
         Returns
         -------
-        task_id : int
-            Selected task ID.
+        task_id : {int, None}
+            Selected task ID, or None if no task exceeds
+            min_score (abstain).
         """
         self._model.eval()
-        best_task = 0
+        best_task = None
         best_score = -1.0
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         for task_id in range(num_learned):
@@ -181,6 +189,9 @@ class FingerprintTaskSelector:
             query_hashes = fingerprint_batch(
                 self._model, x, self._device,
                 layer_names=self._layer_names,
+                radius=self._radius,
+                top_k=self._top_k,
+                fan_out=self._fan_out,
             )
             _, scores = self._db.match(
                 query_hashes, num_learned,
@@ -188,6 +199,9 @@ class FingerprintTaskSelector:
             if scores[task_id] > best_score:
                 best_score = scores[task_id]
                 best_task = task_id
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        if best_score <= min_score:
+            return None
         return best_task
 
     # -----------------------------------------------------------------
@@ -205,9 +219,18 @@ class FingerprintTaskSelector:
     def load(self, filepath):
         """Load fingerprint database from file.
 
+        Restores hyperparameters from the saved database
+        to ensure query-time fingerprinting matches the
+        registration scheme.
+
         Parameters
         ----------
         filepath : str
             Input file path.
         """
         self._db.load(filepath)
+        # Sync hyperparameters from loaded DB
+        self._layer_names = self._db._layer_names
+        self._radius = self._db._radius
+        self._top_k = self._db._top_k
+        self._fan_out = self._db._fan_out

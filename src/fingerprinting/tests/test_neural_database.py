@@ -175,8 +175,8 @@ class TestTaskFingerprintDatabase:
         assert best == 0
 
     # -----------------------------------------------------------------
-    def test_empty_query(self):
-        """Empty query returns task 0 with zero scores."""
+    def test_empty_query_returns_none(self):
+        """Empty query returns None (abstain)."""
         model = _make_dummy_model()
         device = torch.device('cpu')
         dataset = _make_task_dataset(n_samples=10)
@@ -186,5 +186,5 @@ class TestTaskFingerprintDatabase:
             0, model, dataset, device, num_samples=10,
         )
         best, scores = db.match(Counter(), 1)
-        assert best == 0
+        assert best is None
         assert all(s == 0.0 for s in scores)

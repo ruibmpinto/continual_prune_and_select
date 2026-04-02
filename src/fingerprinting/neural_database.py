@@ -182,7 +182,7 @@ class TaskFingerprintDatabase:
         """
         query_total = sum(query_hashes.values())
         if query_total == 0:
-            return 0, [0.0] * num_learned
+            return None, [0.0] * num_learned
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         scores = []
         for task_id in range(num_learned):

@@ -2200,6 +2200,8 @@ def eval(
                     j0 = fp_selector.select_task(
                         x_tmp, num_learned,
                     )
+                    if j0 is None:
+                        continue
 
                 del x_tmp
 
